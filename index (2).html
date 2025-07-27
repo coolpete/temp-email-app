@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>10-Minute Email</title>
+  <script defer>
+    let countdown = 600;
+    let timer;
+    let tempEmail = "";
+    let token = "";
+    let userId = "";
+
+    async function generateTempEmail() {
+      const password = "password123!";
+      const address = generateRandomEmail();
+
+      // Register account
+      const registerRes = await fetch("https://api.mail.tm/accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, password })
+      });
+      const registerData = await registerRes.json();
+
+      if (registerData['@id']) {
+        userId = registerData['@id'];
+        tempEmail = address;
+        document.getElementById("emailDisplay").innerText = tempEmail;
+        localStorage.setItem("tempEmail", tempEmail);
+        localStorage.setItem("tempPass", password);
+
+        // Login to get token
+        const loginRes = await fetch("https://api.mail.tm/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ address, password })
+        });
+        const loginData = await loginRes.json();
+        token = loginData.token;
+        localStorage.setItem("tempToken", token);
+        startCountdown();
+        updateInbox();
+      } else {
+        document.getElementById("emailDisplay").innerText = "Failed to generate. Refresh.";
+      }
+    }
+
+    function generateRandomEmail() {
+      const chars = "abcdefghijklmnopqrstuvwxyz1234567890";
+      let str = "";
+      for (let i = 0; i < 10; i++) str += chars[Math.floor(Math.random() * chars.length)];
+      return str + "@mail.tm";
+    }
+
+    function startCountdown() {
+      clearInterval(timer);
+      timer = setInterval(() => {
+        countdown--;
+        document.getElementById("countdown").innerText = `Expires in: ${countdown}s`;
+        if (countdown <= 0) {
+          clearInterval(timer);
+          localStorage.clear();
+          countdown = 600;
+          generateTempEmail();
+        }
+      }, 1000);
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const storedEmail = localStorage.getItem("tempEmail");
+      const storedToken = localStorage.getItem("tempToken");
+
+      if (storedEmail && storedToken) {
+        tempEmail = storedEmail;
+        token = storedToken;
+        document.getElementById("emailDisplay").innerText = tempEmail;
+        startCountdown();
+        updateInbox();
+      } else {
+        generateTempEmail();
+      }
+
+      document.getElementById("copyBtn").addEventListener("click", () => {
+        navigator.clipboard.writeText(tempEmail).then(() => alert("Email copied!"));
+      });
+
+      document.getElementById("refreshBtn").addEventListener("click", () => {
+        updateInbox();
+      });
+    });
+
+    async function updateInbox() {
+      const inboxDiv = document.getElementById("inbox");
+      inboxDiv.innerHTML = "<p class='text-gray-400'>Fetching messages...</p>";
+
+      if (!token) return;
+
+      const res = await fetch("https://api.mail.tm/messages", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      const data = await res.json();
+      if (!data || !data['hydra:member']) {
+        inboxDiv.innerHTML = "<p class='text-gray-400'>No messages found.</p>";
+        return;
+      }
+
+      inboxDiv.innerHTML = data['hydra:member'].map(msg => `
+        <div class='bg-gray-800 p-3 rounded'>
+          <p><strong>From:</strong> ${msg.from.address}</p>
+          <p><strong>Subject:</strong> ${msg.subject}</p>
+          <p class='text-sm text-gray-400'>${new Date(msg.createdAt).toLocaleString()}</p>
+          <p class='mt-2'>${msg.intro || "(No preview)"}</p>
+        </div>
+      `).join("");
+    }
+  </script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-900 text-white font-sans p-6">
+  <div class="max-w-xl mx-auto text-center">
+    <h1 class="text-3xl font-bold mb-4">10-Minute Email</h1>
+    <div class="bg-gray-800 rounded-xl p-4 mb-4 shadow-lg">
+      <div id="emailDisplay" class="text-xl break-all">Loading...</div>
+      <button id="copyBtn" class="mt-2 bg-blue-600 px-3 py-1 rounded hover:bg-blue-700">Copy</button>
+      <p id="countdown" class="text-sm mt-2">Expires in: 600s</p>
+    </div>
+    <button id="refreshBtn" class="bg-yellow-500 px-4 py-2 rounded-lg mb-4 hover:bg-yellow-600">Refresh Inbox</button>
+    <div id="inbox" class="space-y-2">
+      <p class="text-gray-400">No messages yet.</p>
+    </div>
+
+    <!-- Ad placeholder -->
+    <div class="mt-6 bg-white text-black rounded p-4">
+      <p class="font-semibold">Sponsored:</p>
+      <div id="adPlaceholder">
+        <a href="https://nordvpn.com/your-affiliate-link" target="_blank">
+          <img src="https://static.vpnmentor.com/blog/wp-content/uploads/2020/03/NordVPN-Banner.png" alt="NordVPN Ad" class="w-full rounded" />
+        </a>
+      </div>
+    </div>
+
+    <!-- Affiliate section -->
+    <div class="mt-6 bg-green-800 text-white rounded-xl p-4">
+      <p class="font-bold">Need privacy protection?</p>
+      <a href="https://nordvpn.com/your-affiliate-link" target="_blank" class="underline text-yellow-300">Get NordVPN – fast, secure & anonymous</a>
+    </div>
+  </div>
+</body>
+</html>
